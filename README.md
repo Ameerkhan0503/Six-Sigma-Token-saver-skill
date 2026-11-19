@@ -61,16 +61,27 @@ verify the saving.
 |---|---|---|---|
 | Small one-off task (draw a single SVG file), fresh agent each | 84,739 tokens | 85,884 tokens | +1.4%: no saving |
 
-Conclusion: the skill does not help short one-off tasks; loading it costs
-about 1k tokens. It is aimed at the fixed baseline and long sessions. On the
-author's machine the audit found 23 enabled plugins, with one plugin
-accounting for roughly 65% of all description text, and 5 MCP servers.
-Disabling unused ones of those is where real savings are expected. That
-saving has not been measured yet; re-run the audit and `/context` before and
-after to verify it on your setup.
+| Fix applied (fresh session, context at start) | Before | After | Change |
+|---|---|---|---|
+| Disable the audit's top plugin (72 agents, startup hooks) | 104,648 | 92,594 | **-12,054 (-11.5%)** |
+| of which: custom agents | 9,697 | 4,196 | -5,501 |
+| of which: startup messages (hook output) | 34,174 | 27,638 | -6,536 |
+| of which: skills | 9,728 | 9,872 | +144 (listing is capped, refills) |
+
+Conclusions:
+
+- The skill does not help short one-off tasks; loading it costs about 1k tokens.
+- Following its fix on a real setup saved 12k tokens of context in every new
+  session, reloaded on every message.
+- Disabling a plugin saves its agents and hook output, not its skills, because
+  Claude Code caps the skill listing. The audit ranks plugins accordingly.
+- One reading per configuration; expect some variation. Usage limits drop by
+  less than 11.5% because repeated context is partly cached.
 
 ## Changelog
 
+- v2.1: measured a real fix (-11.5% fresh-session context); audit now ranks
+  plugins by agents and hooks, since the skill listing is capped.
 - v2: added the audit script and fix catalog; trimmed SKILL.md; added the
   "when this won't help" section based on the A/B test.
 - v1: initial DMAIC skill.

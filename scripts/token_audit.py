@@ -5,9 +5,11 @@ Read-only. Looks at local config only (no network) and reports what is loaded
 into context before you type anything: instruction files (CLAUDE.md, rules),
 skill and agent descriptions from enabled plugins and user skills, and MCP
 servers. Token counts are estimates (characters / 4); use /context for exact
-numbers. Plugin and skill figures are an UPPER BOUND: Claude Code trims long
-skill listings, so the real cost is often a third or less. Use them to rank
-what to disable, not as exact totals.
+numbers. Plugin and skill figures are an UPPER BOUND: Claude Code caps the
+skill listing, so removing a plugin's skills frees space that other skills
+refill. Measured on a real setup, disabling a large plugin saved its agent
+descriptions and the text its hooks inject at session start, not its skills.
+Plugins are therefore ranked by agent/command size and hooks.
 
 Usage:
     python token_audit.py [--project DIR] [--claude-home DIR] [--json] [--top N]
@@ -111,16 +113,21 @@ def plugin_install_paths(home):
 def describe_dir(root):
     """Sum description sizes for skills, agents and commands under a plugin root."""
     counts = {"skills": 0, "agents": 0, "commands": 0}
-    chars = 0
+    skill_chars = other_chars = 0
     for kind, pattern in (("skills", "skills/*/SKILL.md"),
                           ("agents", "agents/*.md"),
                           ("commands", "commands/*.md")):
         for f in root.glob(pattern):
             counts[kind] += 1
             label = f.parent.name if kind == "skills" else f.stem
-            chars += len(frontmatter_description(f)) + len(label) + 20
+            size = len(frontmatter_description(f)) + len(label) + 20
+            if kind == "skills":
+                skill_chars += size
+            else:
+                other_chars += size
     mcp = list(load_json(root / ".mcp.json").get("mcpServers", {}).keys())
-    return counts, chars, mcp
+    hooks = (root / "hooks" / "hooks.json").is_file()
+    return counts, skill_chars, other_chars, mcp, hooks
 
 
 def plugin_rows(home, project):
@@ -129,13 +136,17 @@ def plugin_rows(home, project):
     for name in enabled_plugins(home, project):
         root = paths.get(name)
         if not root or not root.is_dir():
-            rows.append({"item": name, "tokens": 0, "note": "install path not found"})
+            rows.append({"item": name, "tokens": 0, "agent_tokens": 0,
+                         "hooks": False, "note": "install path not found"})
             continue
-        counts, chars, mcp = describe_dir(root)
-        rows.append({"item": name, "chars": chars, "tokens": est(chars),
+        counts, skill_chars, other_chars, mcp, hooks = describe_dir(root)
+        rows.append({"item": name, "chars": skill_chars + other_chars,
+                     "tokens": est(skill_chars + other_chars),
+                     "agent_tokens": est(other_chars), "hooks": hooks,
                      "skills": counts["skills"], "agents": counts["agents"],
                      "commands": counts["commands"], "mcp_servers": mcp})
-    rows.sort(key=lambda r: r["tokens"], reverse=True)
+    # Rank by what disabling actually saves: agent/command text and hooks.
+    rows.sort(key=lambda r: (r["agent_tokens"], r["hooks"], r["tokens"]), reverse=True)
     return rows
 
 
@@ -176,12 +187,15 @@ def recommendations(instr, plugins, mcps):
                     f"and commands; move rarely needed detail into a skill.")
     plug_tok = sum(r["tokens"] for r in plugins)
     if len(plugins) > 8 or plug_tok > 4000:
-        heavy = ", ".join(f"{r['item']} (~{r['tokens']})" for r in plugins[:5])
+        heavy = ", ".join(
+            f"{r['item']} (~{r['agent_tokens']} agent/command"
+            f"{', hooks' if r['hooks'] else ''})" for r in plugins[:5])
         recs.append(f"{len(plugins)} plugins enabled, up to ~{plug_tok} tokens of skill/"
-                    f"agent/command descriptions per message (upper bound). Heaviest: "
-                    f"{heavy}. Disable the "
-                    f"ones this project does not use (enabledPlugins in settings.json; "
-                    f"use the project's .claude/settings.json to scope per project).")
+                    f"agent/command descriptions (upper bound). Disabling a plugin mostly "
+                    f"saves its agents and hook output; skill listings are capped and "
+                    f"refill. Most to gain: {heavy}. Disable the ones this project does "
+                    f"not use (enabledPlugins in settings.json; use the project's "
+                    f".claude/settings.json to scope per project).")
     if len(mcps) > 3:
         names = ", ".join(m["item"] for m in mcps)
         recs.append(f"{len(mcps)} MCP servers configured ({names}). Each adds its tool "
@@ -241,7 +255,9 @@ def main():
     section("Instruction files (CLAUDE.md, rules)", instr)
     section("Enabled plugins (descriptions)", plugins,
             lambda r: r.get("note") or f"{r['skills']} skills, {r['agents']} agents, "
-                                         f"{r['commands']} commands")
+                                         f"{r['commands']} commands, ~{r['agent_tokens']}"
+                                         f" agent/command tokens"
+                                         f"{', has hooks' if r['hooks'] else ''}")
     section("User skills (descriptions)", skills)
     print(f"MCP servers: {len(mcps)} (tool schema cost not measurable offline)")
     for m in mcps:

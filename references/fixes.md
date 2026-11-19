@@ -27,11 +27,12 @@ Read this when the audit or usage numbers point at a cause and you need the exac
 These cost tokens on every message in every session, so a small cut here beats a big cut in one task. Always show the user the exact change and get a yes before editing their config.
 
 ### 2a. Plugins
-- Rank by the audit script's plugin section; the heaviest first.
+- Rank by the audit script's plugin section, which orders plugins by agent/command text and hooks. That is what disabling saves: Claude Code caps the skill listing, so removing a plugin's skills just lets other skills refill the space.
+- Measured example: disabling one plugin with 72 agents and startup hooks cut a fresh session from 104,648 to 92,594 tokens (-11.5%). Custom agents -5,501, startup messages -6,536, skills +144 (refilled).
 - Disable globally: in `~/.claude/settings.json`, set `"enabledPlugins": { "<name>@<marketplace>": false }`, or use the `/plugin` menu.
 - Disable for one project only: put the same entry in that project's `.claude/settings.json`. Project settings override user settings, so a plugin can stay on elsewhere.
-- One plugin with hundreds of skills/agents often outweighs the rest combined; check that first.
-- Changes apply to new sessions.
+- Plugins with hooks can inject sizeable text at session start (it shows up under "Messages" in `/context`); weigh that too.
+- Changes apply to new sessions only; measure in a fresh one.
 
 ### 2b. MCP servers
 - List: `claude mcp list`. Remove a user-scoped server: `claude mcp remove <name> -s user`. Toggle within a session: `/mcp`.

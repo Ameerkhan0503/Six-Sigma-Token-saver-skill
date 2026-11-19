@@ -24,7 +24,7 @@ Goal (what runs out, e.g. "5-hour limit gone by noon"), scope (which projects or
 
 ## A: Analyze
 Match the biggest numbers to causes. Usual suspects, in order of typical size:
-- Many plugins enabled (one large plugin can cost more than everything else combined)
+- Many plugins enabled. Disabling one saves its **agent descriptions and the text its hooks inject at session start**, not its skills: Claude Code caps the skill listing, so freed skill space is refilled by other plugins. Measured: turning off one large plugin (72 agents, startup hooks) cut a fresh session from 104,648 to 92,594 tokens (-11.5%); agents fell 57%, startup messages 19%, skills did not change.
 - MCP servers the project never uses
 - Long CLAUDE.md or rules files written as essays
 - Long sessions without `/clear`; whole-file reads; unbounded Grep/Bash output; rework from vague requests
@@ -33,14 +33,14 @@ For the full defect-to-fix catalog and exact config commands, read `references/f
 
 ## I: Improve
 Apply the highest-impact fix first and show the user exactly what changes. Config edits (disabling plugins, removing MCP servers, trimming CLAUDE.md) change their setup, so propose the change, get a yes, then apply it. Quick wins:
-1. **Disable unused plugins**, starting with the heaviest from the audit. Scope by project if needed.
+1. **Disable unused plugins**, starting with the audit's top-ranked (most agent/command text, has hooks). Scope by project if needed.
 2. **Remove or scope unused MCP servers.**
 3. **Trim instruction files** to facts and commands; move rare detail into a skill, which loads only when triggered.
 4. **`/clear` between unrelated tasks; `/compact <focus>`** when a long task must continue.
 5. **Read narrowly, cap output**: `Read` with offset/limit, Grep `files_with_matches` first, pipe noisy commands through `tail`/`grep`.
 
 ## C: Control
-- Re-run the audit and the usage check; compare with the baseline.
+- Re-run the audit and the usage check; compare with the baseline. Plugin changes apply only to new sessions, so measure in a fresh one. A clean A/B: start a fresh session, have it call the usage tool on itself and report; change one setting (e.g. a project `.claude/settings.json`); repeat; compare.
 - Offer to add the short habits block from `references/fixes.md` to CLAUDE.md so the gains stick.
 - Re-audit after installing new plugins.
 
